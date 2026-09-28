@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/sammykenny2/project-bootstrap.git",
+  "commit": "21f97d74031c53854093bdf63deb0ab01aabad53",
+  "preset": "minimal",
+  "generatedOn": "2026-09-28",
+  "generator": "scripts/windows/Initialize-Project.ps1"
+}

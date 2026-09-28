@@ -1,0 +1,22 @@
+{
+  "name": "@cats-inc/cats-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pinned upstream recipes and preview artifacts for Cats managed Plugins",
+  "license": "MIT",
+  "repository": "github:cats-inc/cats-plugins",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "node src/cli.mjs build",
+    "verify": "node src/cli.mjs verify",
+    "test": "node --test",
+    "check": "npm test && npm run build && npm run verify"
+  },
+  "dependencies": {
+    "fflate": "0.8.3",
+    "yaml": "2.9.1"
+  }
+}

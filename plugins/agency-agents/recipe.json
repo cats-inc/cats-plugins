@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "agency-agents",
+  "version": "0.1.0",
+  "channel": "internal-preview",
+  "displayName": "Agency Agents — selected roles",
+  "description": "Upstream Code Reviewer and UX Researcher instruction skills, packaged for the Cats Plugin pilot.",
+  "converter": { "entry": "scripts/convert.sh", "tool": "antigravity" },
+  "skills": [
+    {
+      "source": "engineering/engineering-code-reviewer.md",
+      "slug": "agency-code-reviewer",
+      "family": "work",
+      "role": "agency_code_reviewer",
+      "packageKind": "role",
+      "capabilityTags": ["code-review", "correctness", "security-review"],
+      "productTags": ["quality", "review"],
+      "deliveryHints": ["filesystem", "instructions"]
+    },
+    {
+      "source": "design/design-ux-researcher.md",
+      "slug": "agency-ux-researcher",
+      "family": "work",
+      "role": "agency_ux_researcher",
+      "packageKind": "role",
+      "capabilityTags": ["user-research", "usability", "research-planning"],
+      "productTags": ["design", "research"],
+      "deliveryHints": ["filesystem", "instructions"]
+    }
+  ]
+}

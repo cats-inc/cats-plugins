@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  producer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agency-preview-${{ matrix.os }}
+          path: dist/agency-agents/
+          retention-days: 14
+  reproducibility:
+    needs: producer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agency-preview-*
+          path: receipts
+      - name: Compare artifact hashes across operating systems
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp receipts/agency-preview-ubuntu-latest/agency-agents-0.1.0.catsplugin.sha256 receipts/agency-preview-windows-latest/agency-agents-0.1.0.catsplugin.sha256
+          cmp receipts/agency-preview-ubuntu-latest/agency-agents-0.1.0.catsplugin.sha256 receipts/agency-preview-macos-latest/agency-agents-0.1.0.catsplugin.sha256
