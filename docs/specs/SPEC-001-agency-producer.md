@@ -2,7 +2,7 @@
 
 ## Metadata
 
-Status: Implemented; cross-platform CI confirmation pending. Owner: Cats Plugins maintainers.
+Status: Implemented and validated (producer only). Owner: Cats Plugins maintainers.
 Scope: producer only; host lifecycle remains in Platform SPEC-121.
 
 ## Summary and goals
@@ -47,3 +47,11 @@ Managed capability discovery, explicit user selection, publisher trust, installa
 storage, clean-context re-entry and lifecycle operation recovery need host work.
 
 Related plan: [PLAN-001](../plans/PLAN-001-agency-producer.md).
+
+## Validation evidence
+
+All 11 tests, build and verification passed on Windows, Linux and macOS, and
+cross-platform artifact digests matched in
+[CI run 36407755254](https://github.com/cats-inc/cats-plugins/actions/runs/36407755254).
+Independent static review found no remaining blockers after four fixes.
+This evidence covers the producer acceptance criteria, not the host questions.

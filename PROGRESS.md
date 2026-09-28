@@ -8,6 +8,9 @@ zero vulnerabilities at installation; source/license hashes and local links pass
 
 Preview: 11 files, 40,832 bytes; SHA-256
 `26afae3f0c5f551cc3bbce267c82d574963c4c2f94f48f9e8d3dcb0aa0ca07a5`.
-The main push and cross-platform CI confirmation are the remaining delivery steps.
+Implementation commit `6944a36` was pushed directly to main.
+[CI run 36407755254](https://github.com/cats-inc/cats-plugins/actions/runs/36407755254)
+passed on Windows, Linux and macOS; the subsequent cross-platform digest
+comparison passed. All producer MVP delivery steps are complete.
 See docs/plans/PLAN-001-agency-producer.md. Host integration, model quality and
-public releases have not been delivered.
+public releases remain follow-up scope.
