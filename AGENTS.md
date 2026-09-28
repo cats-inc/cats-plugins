@@ -101,6 +101,14 @@ Branch cleanup is an explicit maintenance task, never an automatic commit step.
 Preview `scripts/windows/Remove-MergedBranches.ps1 -WhatIf` or the corresponding
 Bash script's `--dry-run`; see `docs/AGENT-GUIDE.md` for details.
 
+When cleaning up after a merge, remove the worktree you created for that work
+before sweeping; the helper skips any branch a worktree still holds. Remove only
+worktrees you created, since another may hold someone else's live work, and keep
+one past its merge only when the user asks. While several agents share a clone,
+keep the main checkout on the default branch and work in worktrees under the
+repository's Git-ignored `.claude/worktrees/`, not sibling directories that
+folder-wide tools such as bulk `git pull` scripts also scan.
+
 ## Command Aliases
 
 | Alias | Required behavior |
