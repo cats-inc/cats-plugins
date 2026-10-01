@@ -1,5 +1,11 @@
 # Deployment and releases
 
+Follow the [shared release preparation/completion policy](https://github.com/cats-inc/cats-one/blob/main/docs/release-guide.md#release-preparation-and-completion):
+prepare all release documentation and pins in the original version change.
+Verify publication using existing hosted Release/Actions/registry evidence, then
+report and finish. Do not add tracked publication reports, status-only commits
+or follow-up PRs, or chase unrelated main updates after verification.
+
 There is no deployed service or install command. package.json is private to block
 accidental npm publication. CI builds internal preview artifacts only.
 
