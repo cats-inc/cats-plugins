@@ -7,34 +7,91 @@ on:
 permissions:
   contents: read
 jobs:
+  # Match the other Cats repos: detect docs-only changes inside the workflow so
+  # required checks still report. Unknown bases and failed detection run CI.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.paths.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Detect documentation-only changes
+        id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request) base=HEAD^1 ;;
+            push) base="$BEFORE" ;;
+            *) base= ;;
+          esac
+          code=true
+          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
+            # Include both sides of renames across the docs/ boundary.
+            changed=$(git diff --no-renames --name-only "$base" HEAD)
+            code_changed=$(git diff --no-renames --name-only "$base" HEAD -- . ':(top,exclude)docs/')
+            printf 'Changed files:\n%s\n' "$changed"
+            if [ -n "$changed" ] && [ -z "$code_changed" ]; then code=false; fi
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
   producer:
+    needs: changes
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # Preserve required matrix check names without allocating Windows/macOS for docs.
+    runs-on: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' && 'ubuntu-latest' || matrix.os }}
+    env:
+      DOCS_ONLY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' }}
     steps:
+      - name: Documentation-only change
+        if: env.DOCS_ONLY == 'true'
+        run: echo "Only docs/ changed; install, tests, builds and artifact uploads are skipped."
       - uses: actions/checkout@v5
+        if: env.DOCS_ONLY != 'true'
       - uses: actions/setup-node@v4
+        if: env.DOCS_ONLY != 'true'
         with:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
+        if: env.DOCS_ONLY != 'true'
       - run: npm run check
+        if: env.DOCS_ONLY != 'true'
       - uses: actions/upload-artifact@v4
+        if: env.DOCS_ONLY != 'true'
         with:
           name: agency-preview-${{ matrix.os }}
           path: dist/agency-agents/
           retention-days: 14
   reproducibility:
-    needs: producer
+    needs: [changes, producer]
+    if: always()
     runs-on: ubuntu-latest
+    env:
+      DOCS_ONLY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' }}
     steps:
+      - name: Require every producer check
+        env:
+          PRODUCER_RESULT: ${{ needs.producer.result }}
+        run: test "$PRODUCER_RESULT" = success
+      - name: Documentation-only change
+        if: env.DOCS_ONLY == 'true'
+        run: echo "Only docs/ changed; there are no package artifacts to compare."
       - uses: actions/download-artifact@v4
+        if: env.DOCS_ONLY != 'true'
         with:
           pattern: agency-preview-*
           path: receipts
       - name: Compare artifact hashes across operating systems
+        if: env.DOCS_ONLY != 'true'
         shell: bash
         run: |
           set -euo pipefail
