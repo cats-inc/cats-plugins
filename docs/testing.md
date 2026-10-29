@@ -13,8 +13,21 @@ license/provenance, repeatability, tampered sources, extra files, mutable refs,
 metadata identity, path/link rejection, ZIP tampering/limits, CLI non-overwrite
 and incomplete receipts. No CLI account, model, user config or Cats state is used.
 
-CI runs this suite on Node.js 24 across Ubuntu, Windows and macOS, retains the
+For changes outside root `docs/`, CI runs this suite on Node.js 24 across Ubuntu, Windows and macOS, retains the
 three preview artifacts for 14 days, then compares their SHA-256 sidecars.
+Like the other Cats repositories, a `changes` job detects docs-only updates: PRs
+compare the test merge to its first parent; pushes compare the entire pushed
+range. Renames include both paths. Unknown bases, empty diffs, failed detection
+and manual dispatches run the full suite.
+
+Confirmed docs-only updates preserve the required `producer (...)` check names
+with lightweight Ubuntu acknowledgements and skip dependency installation,
+tests, packaging and artifact upload. `reproducibility` still requires successful
+producer checks, then acknowledges that no artifacts need comparison. Mixed
+changes retain the complete matrix and hash comparison. No Windows/macOS runner
+is allocated for docs-only work. Tests exercise the workflow's actual detection
+and final job gate and keep executable inputs independent of repo documentation.
+
 A CI artifact is not a published release. For stale local output, select a new
 directory instead of replacing a mismatch.
 
