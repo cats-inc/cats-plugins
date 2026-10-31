@@ -28,6 +28,21 @@ changes retain the complete matrix and hash comparison. No Windows/macOS runner
 is allocated for docs-only work. Tests exercise the workflow's actual detection
 and final job gate and keep executable inputs independent of repo documentation.
 
+A push to `main` is acknowledged the same way when its merged pull request already
+passed on the same tree. `main` requires up-to-date branches, so a squash merge
+usually lands exactly what the pull request's CI tested. The `changes` job reuses
+that run only when all of these hold:
+
+- the push adds one commit on the previous `main`;
+- the GitHub API names that commit as a pull request's merge;
+- the request's final head, fetched from `refs/pull/<n>/head`, contains the
+  previous `main` and has the pushed commit's tree;
+- CI passed on that head as a `pull_request` run.
+
+The pull request's run then holds the preview artifacts and their hash comparison.
+Any other push, or any failed lookup, runs the full matrix. `tests/ci.test.mjs`
+runs this step against a local origin with a stubbed `gh`.
+
 A CI artifact is not a published release. For stale local output, select a new
 directory instead of replacing a mismatch.
 
