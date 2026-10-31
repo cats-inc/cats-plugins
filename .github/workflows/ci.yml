@@ -9,10 +9,18 @@ permissions:
 jobs:
   # Match the other Cats repos: detect docs-only changes inside the workflow so
   # required checks still report. Unknown bases and failed detection run CI.
+  # A push to main also skips when its merged pull request passed on the same tree.
   changes:
     runs-on: ubuntu-latest
+    # Job permissions replace the workflow's: checkout and the merge lookups read
+    # contents, the merged pull request and its CI runs.
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     outputs:
       code: ${{ steps.paths.outputs.code }}
+      skip: ${{ steps.plan.outputs.skip }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -38,6 +46,49 @@ jobs:
             if [ -n "$changed" ] && [ -z "$code_changed" ]; then code=false; fi
           fi
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+      - name: Reuse the merged pull request's green run
+        id: merged
+        if: github.event_name == 'push' && steps.paths.outputs.code == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Main requires up-to-date branches, so a squash merge lands the tree
+          # its pull request's CI already passed. Reuse that run only when this
+          # push adds one commit, the commit is a pull request's merge, the
+          # request's final head contains the previous main and has this exact
+          # tree, and CI passed on that head. Anything else, or any failed
+          # lookup, runs every check.
+          tested=false
+          sha=$(git rev-parse HEAD)
+          if [ -n "$BEFORE" ] && [ "$(git rev-parse --verify --quiet 'HEAD^' || true)" = "$BEFORE" ]; then
+            pr=$(gh api "repos/$REPO/commits/$sha/pulls" --jq ".[] | select(.merge_commit_sha == \"$sha\") | \"\(.number) \(.head.sha)\"" 2>/dev/null | head -n 1 || true)
+            number=${pr%% *}
+            head=${pr##* }
+            if [[ "$number" =~ ^[0-9]+$ && "$head" =~ ^[0-9a-f]{40}$ ]] &&
+              git fetch --no-tags --quiet origin "refs/pull/$number/head" &&
+              [ "$(git rev-parse FETCH_HEAD)" = "$head" ] &&
+              git merge-base --is-ancestor "$BEFORE" "$head" &&
+              [ "$(git rev-parse "$head^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+              passed=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head&event=pull_request&status=success&per_page=1" --jq '.total_count' 2>/dev/null || true)
+              if [[ "$passed" =~ ^[1-9][0-9]*$ ]]; then
+                tested=true
+                echo "Pull request #$number passed CI on $head, which has this exact tree."
+              fi
+            fi
+          fi
+          echo "tested=$tested" | tee -a "$GITHUB_OUTPUT"
+      - name: Decide what to skip
+        id: plan
+        env:
+          CODE: ${{ steps.paths.outputs.code }}
+          TESTED: ${{ steps.merged.outputs.tested }}
+        run: |
+          set -euo pipefail
+          skip=
+          if [ "$CODE" = "false" ]; then skip=docs; elif [ "$TESTED" = "true" ]; then skip=tested; fi
+          echo "skip=$skip" | tee -a "$GITHUB_OUTPUT"
 
   producer:
     needs: changes
@@ -46,27 +97,30 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    # Preserve required matrix check names without allocating Windows/macOS for docs.
-    runs-on: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' && 'ubuntu-latest' || matrix.os }}
+    # Preserve required matrix check names without allocating Windows/macOS for a skip.
+    runs-on: ${{ needs.changes.result == 'success' && needs.changes.outputs.skip != '' && 'ubuntu-latest' || matrix.os }}
     env:
-      DOCS_ONLY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' }}
+      SKIP: ${{ needs.changes.result == 'success' && needs.changes.outputs.skip || '' }}
     steps:
       - name: Documentation-only change
-        if: env.DOCS_ONLY == 'true'
+        if: env.SKIP == 'docs'
         run: echo "Only docs/ changed; install, tests, builds and artifact uploads are skipped."
+      - name: Already tested in its pull request
+        if: env.SKIP == 'tested'
+        run: echo "The merged pull request passed CI on this exact tree; install, tests, builds and artifact uploads are skipped, and its run holds the artifacts."
       - uses: actions/checkout@v5
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
       - uses: actions/setup-node@v4
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
         with:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
       - run: npm run check
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
       - uses: actions/upload-artifact@v4
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
         with:
           name: agency-preview-${{ matrix.os }}
           path: dist/agency-agents/
@@ -76,22 +130,25 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     env:
-      DOCS_ONLY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'false' }}
+      SKIP: ${{ needs.changes.result == 'success' && needs.changes.outputs.skip || '' }}
     steps:
       - name: Require every producer check
         env:
           PRODUCER_RESULT: ${{ needs.producer.result }}
         run: test "$PRODUCER_RESULT" = success
       - name: Documentation-only change
-        if: env.DOCS_ONLY == 'true'
+        if: env.SKIP == 'docs'
         run: echo "Only docs/ changed; there are no package artifacts to compare."
+      - name: Already tested in its pull request
+        if: env.SKIP == 'tested'
+        run: echo "The merged pull request compared the artifacts of this exact tree."
       - uses: actions/download-artifact@v4
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
         with:
           pattern: agency-preview-*
           path: receipts
       - name: Compare artifact hashes across operating systems
-        if: env.DOCS_ONLY != 'true'
+        if: env.SKIP == ''
         shell: bash
         run: |
           set -euo pipefail
