@@ -61,7 +61,9 @@ source and have not been run.
 ## 2. Build options
 
 All read from `CMakeLists.txt`, `ggml/CMakeLists.txt`, `ggml/src/CMakeLists.txt`
-and `ggml/src/ggml-cpu/CMakeLists.txt` at the pinned commit (Source).
+and `ggml/src/ggml-cpu/CMakeLists.txt` at the pinned commit (Source). The root
+`CMakeLists.txt` presets no ggml default; it forwards only the sanitizer and
+warning settings, so the defaults below are ggml's own.
 
 - **Static library.** `BUILD_SHARED_LIBS=OFF`. Its default is `ON` on Linux.
   - Keep `GGML_STATIC=OFF`. It adds `-static` to every link, which would link
@@ -76,8 +78,10 @@ and `ggml/src/ggml-cpu/CMakeLists.txt` at the pinned commit (Source).
   - `GGML_OPENMP=OFF`. Its default is `ON`, so it must be set.
   - `GGML_BLAS` defaults to `OFF` outside Apple. `GGML_LLAMAFILE` defaults to
     `OFF`.
-  - The GPU backends default to `OFF`: CUDA, HIP, MUSA, Vulkan, OpenCL, SYCL,
-    WebGPU, CANN, zDNN and the others. `GGML_METAL` is on only for Apple.
+  - The other backends default to `OFF`: `GGML_CUDA`, `GGML_HIP`,
+    `GGML_MUSA`, `GGML_VULKAN`, `GGML_OPENCL`, `GGML_SYCL`, `GGML_WEBGPU`,
+    `GGML_ZDNN`, `GGML_OPENVINO`, `GGML_HEXAGON`, `GGML_ZENDNN`, `GGML_ET`,
+    `GGML_VIRTGPU` and `GGML_RPC`. `GGML_METAL` is on only for Apple.
   - Pass them as `OFF` explicitly anyway, so the receipt states them.
 - **No dynamic backends.** `GGML_BACKEND_DL=OFF` and
   `GGML_CPU_ALL_VARIANTS=OFF` (both default).
@@ -98,8 +102,10 @@ and `ggml/src/ggml-cpu/CMakeLists.txt` at the pinned commit (Source).
   `GGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16` adds
   `-march=armv8.2-a+dotprod+fp16` when `GGML_NATIVE=OFF`.
   - KleidiAI, SVE and SME stay off; none is in the baseline.
-- **Toolchain floor.** `ggml/` needs CMake 3.14 or later, with C11 and C++17.
-  Ubuntu 22.04 ships CMake 3.22.
+- **Toolchain floor.** `ggml/` needs CMake 3.14 or later, with C11 and C++17
+  (Source). Ubuntu 22.04's `cmake` is 3.22.1: `3.22.1-1ubuntu1` in `jammy` and
+  `3.22.1-1ubuntu1.22.04.2` in `jammy-updates` (Bytes: the package indexes at
+  snapshot `20261101T000000Z`).
 
 ## 3. Language table
 
@@ -151,7 +157,8 @@ and `ggml/src/ggml-cpu/CMakeLists.txt` at the pinned commit (Source).
      recorded, and the choice is the owner's.
      - **`ggml-base-q5_1.bin` (proposed):** 59,707,625 bytes, SHA-256
        `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898`
-       (Bytes). It is the smaller step down from base.
+       (Bytes). It is the smaller of the two quantized files; neither has been
+       measured yet (FR-E2).
      - **`ggml-base-q8_0.bin`:** 81,768,585 bytes, SHA-256
        `c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9`
        (Docs only: Hugging Face's LFS metadata, not downloaded).
@@ -213,7 +220,9 @@ These are recorded for Phase 4, not settled here.
 
 - **HTTPS inside the image.** The snapshot is reachable only over HTTPS. It is
   not yet checked whether the pinned `ubuntu:22.04` image has CA certificates,
-  and whether its apt is 2.4.11 or later.
+  and whether its apt is 2.4.11 or later. `jammy-updates` carries apt 2.4.14 at
+  snapshot `20261101T000000Z`, but the image's own apt decides the first
+  `apt-get update`.
 - **Retention risk.** A rebuild more than two years after its snapshot may
   lose its packages, which weakens FR-C1. The retained source archive (FR-A4)
   holds no system packages.
