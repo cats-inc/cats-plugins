@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In progress; Phase 0 authorized by the owner, 2026-11-16, its owner items open. Phase 1 authorized 2026-11-17 and done |
+| Status | In progress; Phase 0 authorized by the owner, 2026-11-16, its owner items open. Phase 1 authorized 2026-11-17 and done. On 2026-11-17 the owner asked for the rest to be done straight through, short of the owner items, the license review and any release |
 | Owner | Cats Plugins maintainers |
 | Spec | [SPEC-002](../specs/SPEC-002-linux-stt-pack-producer.md) |
 | Decision | [ADR-002](../decisions/002-produce-native-feature-packs-beside-plugin-content.md) |
