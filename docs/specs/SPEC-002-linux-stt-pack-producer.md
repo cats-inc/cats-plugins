@@ -370,4 +370,4 @@ The owner delegated D1–D3 on 2026-11-16.
 ---
 
 *Created: 2026-11-16*
-*Related Plan: not yet written*
+*Related Plan: [PLAN-002](../plans/PLAN-002-linux-stt-pack-producer.md)*
