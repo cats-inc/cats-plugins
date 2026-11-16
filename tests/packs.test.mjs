@@ -5,8 +5,8 @@ import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFile
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { fetchCommit, fetchVerifiedSource } from '../src/packs/git-source.mjs';
+import { fileURLToPath } from 'node:url';
+import { fetchCommit, fetchVerifiedSource, isolatedGitEnv } from '../src/packs/git-source.mjs';
 import { loadPack, sourceArchive, validateLock, validateRecipe, verifySourceArchive } from '../src/packs/linux-stt.mjs';
 import { downloadModel } from '../src/packs/model.mjs';
 import { readTar, writeTar } from '../src/packs/tar.mjs';
@@ -27,13 +27,13 @@ function fixtureRepo(dir, entries) {
   const repo = path.join(dir, 'upstream.git');
   writeFileSync(path.join(dir, 'fixture-gitconfig'), '');
   const env = {
-    ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(dir, 'fixture-gitconfig'),
+    ...isolatedGitEnv(path.join(dir, 'fixture-gitconfig')),
     GIT_INDEX_FILE: path.join(dir, 'fixture-index'), GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
     GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid',
     GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
   };
   const git = (args, input) => execFileSync('git', ['--git-dir', repo, ...args], { env, input, encoding: 'utf8' }).trim();
-  git(['init', '--quiet', '--bare']);
+  git(['init', '--quiet', '--bare', '--object-format=sha1']);
   for (const entry of entries) {
     const oid = entry.oid ?? git(['hash-object', '-w', '--stdin'], entry.content);
     git(['update-index', '--add', '--cacheinfo', `${entry.mode},${oid},${entry.path}`]);
@@ -43,7 +43,9 @@ function fixtureRepo(dir, entries) {
   // A later commit makes the locked one a non-tip commit, as upstream tags are.
   const tip = git(['commit-tree', '--no-gpg-sign', '-m', 'later', '-p', commit, tree]);
   git(['update-ref', 'refs/heads/main', tip]);
-  return { url: pathToFileURL(repo).href, commit, tree };
+  // A plain path uses the same local upload-pack transport as file:// on every
+  // OS, without translating a Windows drive letter into a URL.
+  return { url: repo, commit, tree };
 }
 
 const FILES = [
@@ -75,6 +77,10 @@ test('the upstream path check keeps real upstream names and rejects escapes', ()
     { path: 'Read.me', mode: '100644', bytes: Buffer.from('a') },
     { path: 'read.me', mode: '100644', bytes: Buffer.from('b') },
   ]), /case-alias/);
+  assert.throws(() => contentManifest([
+    { path: 'A', mode: '100644', bytes: Buffer.from('a') },
+    { path: 'a/x', mode: '100644', bytes: Buffer.from('b') },
+  ]), /collide by case: a/);
 });
 
 test('a locked commit is fetched by hash and its content hash matches an independent computation', t => {
@@ -86,8 +92,25 @@ test('a locked commit is fetched by hash and its content hash matches an indepen
 });
 
 test('AC-01: a wrong commit stops the fetch', t => {
+  const { url, source, dir } = fixtureSource(t);
+  // The same repository serves the locked commit, so only the hash differs.
+  assert.equal(fetchVerifiedSource(source, path.join(dir, 'work-good'), url).length, FILES.length);
+  assert.throws(() => fetchVerifiedSource({ ...source, commit: '1'.repeat(40) }, path.join(dir, 'work-bad'), url),
+    /Cannot fetch commit 1{40}/);
+});
+
+test('inherited Git configuration variables do not reach the fetch', t => {
   const { url, source, work } = fixtureSource(t);
-  assert.throws(() => fetchVerifiedSource({ ...source, commit: '1'.repeat(40) }, work, url), /Cannot fetch commit 1{40}/);
+  const saved = { ...process.env };
+  t.after(() => {
+    for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
+    Object.assign(process.env, saved);
+  });
+  Object.assign(process.env, {
+    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'never',
+    GIT_CONFIG_PARAMETERS: "'protocol.allow'='never'", GIT_DEFAULT_HASH: 'sha256',
+  });
+  assert.equal(fetchVerifiedSource(source, work, url).length, FILES.length);
 });
 
 test('AC-01: a wrong tree, file count or content hash stops the fetch', t => {

@@ -25,15 +25,24 @@ export const byPath = (a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(
 // the path's UTF-8 bytes, "<git mode> <sha256> <size> <path>\n". The hash is
 // the SHA-256 of those lines. Only regular files exist (no links or submodules).
 export function contentManifest(entries) {
-  const seen = new Set();
-  return [...entries].sort(byPath).map(entry => {
+  const files = new Set();
+  const directories = new Set();
+  const lines = [...entries].sort(byPath).map(entry => {
     upstreamPath(entry.path);
     if (!MODES.has(entry.mode)) throw new Error(`Unsupported upstream mode ${entry.mode}: ${entry.path}`);
     const folded = entry.path.toLowerCase();
-    if (seen.has(folded)) throw new Error(`Duplicate or case-alias upstream path: ${entry.path}`);
-    seen.add(folded);
+    if (files.has(folded)) throw new Error(`Duplicate or case-alias upstream path: ${entry.path}`);
+    files.add(folded);
+    const parts = folded.split('/');
+    for (let i = 1; i < parts.length; i++) directories.add(parts.slice(0, i).join('/'));
     return `${entry.mode} ${sha256(entry.bytes)} ${entry.bytes.length} ${entry.path}\n`;
-  }).join('');
+  });
+  // A file and a directory whose names differ only in case collide on
+  // case-insensitive file systems.
+  for (const file of files) {
+    if (directories.has(file)) throw new Error(`Upstream file and directory collide by case: ${file}`);
+  }
+  return lines.join('');
 }
 
 export const contentSha256 = entries => sha256(contentManifest(entries));

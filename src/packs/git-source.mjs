@@ -5,15 +5,20 @@ import { contentSha256, MODES, upstreamPath } from './tree.mjs';
 
 const MAX_TREE_BYTES = 256 * 2 ** 20;
 
-// Git runs with an empty global configuration, no system configuration and no
-// prompts, so a user's URL rewrites, hooks or credentials never take part.
+// Git runs with no inherited GIT_* variables, an empty global configuration, no
+// system configuration and no prompts, so a user's URL rewrites, hooks,
+// credentials or default object format never take part.
+export function isolatedGitEnv(globalConfig) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^GIT_/iu.test(name)));
+  return {
+    ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_COUNT: '0',
+    GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', LC_ALL: 'C',
+  };
+}
+
 function git(workDir, args, options = {}) {
   return execFileSync('git', ['--git-dir', path.join(workDir, 'repo.git'), ...args], {
-    maxBuffer: MAX_TREE_BYTES, timeout: 10 * 60_000, ...options,
-    env: {
-      ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(workDir, 'gitconfig'),
-      GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', LC_ALL: 'C',
-    },
+    maxBuffer: MAX_TREE_BYTES, timeout: 10 * 60_000, ...options, env: isolatedGitEnv(path.join(workDir, 'gitconfig')),
   });
 }
 
@@ -24,7 +29,7 @@ export function fetchCommit(repositoryUrl, commit, workDir) {
   if (!/^[a-f0-9]{40}$/u.test(commit)) throw new Error('A source commit must be a full 40-character hash');
   mkdirSync(workDir, { recursive: true });
   writeFileSync(path.join(workDir, 'gitconfig'), '', { flag: 'wx' });
-  git(workDir, ['init', '--quiet', '--bare']);
+  git(workDir, ['init', '--quiet', '--bare', '--object-format=sha1']);
   try {
     git(workDir, ['fetch', '--quiet', '--depth=1', '--no-tags', '--no-recurse-submodules', '--', repositoryUrl, commit],
       { stdio: ['ignore', 'pipe', 'pipe'] });

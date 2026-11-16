@@ -1,4 +1,4 @@
-import { constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,11 +50,22 @@ async function main() {
     const archive = sourceArchive(pack, entries, readBridge(root));
     const verified = verifySourceArchive(archive, pack, readBridge(root));
     const name = sourceArchiveName(pack.recipe);
-    mkdirSync(path.join(output, 'models'), { recursive: true });
-    writeFileSync(path.join(output, name), archive, { flag: 'wx' });
-    writeFileSync(path.join(output, `${name}.sha256`), `${sha256(archive)}  ${name}\n`, { flag: 'wx' });
-    for (const model of models) {
-      copyFileSync(path.join(scratch, model.file), path.join(output, 'models', model.file), constants.COPYFILE_EXCL);
+    // The output appears only complete: it is written beside its final path,
+    // then renamed. A failure removes the staging directory this run created.
+    mkdirSync(path.dirname(output), { recursive: true });
+    const staging = mkdtempSync(path.join(path.dirname(output), `.${path.basename(output)}-`));
+    try {
+      mkdirSync(path.join(staging, 'models'));
+      writeFileSync(path.join(staging, name), archive, { flag: 'wx' });
+      writeFileSync(path.join(staging, `${name}.sha256`), `${sha256(archive)}  ${name}\n`, { flag: 'wx' });
+      for (const model of models) {
+        copyFileSync(path.join(scratch, model.file), path.join(staging, 'models', model.file), constants.COPYFILE_EXCL);
+      }
+      requireThat(!existsSync(output), 'Output exists; choose a new output directory');
+      renameSync(staging, output);
+    } catch (error) {
+      rmSync(staging, { recursive: true, force: true });
+      throw error;
     }
     console.log(json({ sources: path.join(output, name), ...verified, models: models.map(model => model.file) }));
   } finally {

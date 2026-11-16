@@ -17,11 +17,19 @@ export async function downloadModel(model, destination, { fetch = globalThis.fet
       size += chunk.length;
       if (size > model.size) throw new Error(`Model ${model.file} is larger than the locked ${model.size} bytes`);
       hash.update(chunk);
-      await file.write(chunk);
+      // FileHandle.write may write part of a chunk; finish it or fail.
+      for (let offset = 0; offset < chunk.length;) {
+        const { bytesWritten } = await file.write(chunk, offset, chunk.length - offset);
+        if (bytesWritten <= 0) throw new Error(`Cannot write model ${model.file}`);
+        offset += bytesWritten;
+      }
     }
     if (size !== model.size) throw new Error(`Model ${model.file} has ${size} bytes; the lock expects ${model.size}`);
     const digest = hash.digest('hex');
     if (digest !== model.sha256) throw new Error(`Model ${model.file} SHA-256 ${digest} does not match the lock`);
+    await file.sync();
+    const written = (await file.stat()).size;
+    if (written !== model.size) throw new Error(`Model ${model.file} wrote ${written} bytes; the lock expects ${model.size}`);
     complete = true;
   } finally {
     await file.close();
