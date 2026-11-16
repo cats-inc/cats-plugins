@@ -12,6 +12,7 @@
   "scripts": {
     "build": "node src/cli.mjs build",
     "verify": "node src/cli.mjs verify",
+    "pack": "node src/packs/cli.mjs",
     "test": "node --test",
     "check": "npm test && npm run build && npm run verify"
   },

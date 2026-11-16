@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "linux-stt",
+  "version": "0.1.0",
+  "minUsableVersion": "0.1.0",
+  "helperProtocol": 1,
+  "minGlibc": "2.35",
+  "cpuBaseline": {
+    "x64": "x86-64-v3",
+    "arm64": "armv8.2-a+dotprod+fp16"
+  },
+  "models": {
+    "candidates": [
+      "ggml-base.bin",
+      "ggml-base-q5_1.bin",
+      "ggml-tiny.bin"
+    ],
+    "selected": null
+  },
+  "threads": null,
+  "languageMapping": {
+    "jw": "jv"
+  },
+  "build": {
+    "image": null,
+    "packageSnapshot": null
+  }
+}

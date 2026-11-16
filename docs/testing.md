@@ -13,6 +13,22 @@ license/provenance, repeatability, tampered sources, extra files, mutable refs,
 metadata identity, path/link rejection, ZIP tampering/limits, CLI non-overwrite
 and incomplete receipts. No CLI account, model, user config or Cats state is used.
 
+Feature pack commands are separate from the Plugin build:
+
+```sh
+npm run pack -- check linux-stt
+npm run pack -- fetch linux-stt --out NEW_DIR [--model FILE|all]
+npm run pack -- verify-sources linux-stt NEW_DIR/linux-stt-0.1.0-sources.tar
+```
+
+`fetch` needs the network. It fetches the locked whisper.cpp commit by hash
+(never a branch or tag), checks its tree id, file count and content hash, and
+downloads each chosen model, keeping it only when its size and SHA-256 match.
+Only then does it write the retained source archive (uncompressed ustar) and
+the models. `tests/packs.test.mjs` needs no network. It uses Git fixture
+repositories built from plumbing, an injected model transport and a golden
+archive digest, and covers each tamper case of SPEC-002 AC-01.
+
 Unless a change is documentation only or already passed (below), CI runs this
 suite on Node.js 24 across Ubuntu, Windows and macOS, retains the three preview
 artifacts for 14 days, then compares their SHA-256 sidecars. Documentation is root `docs/` plus the root

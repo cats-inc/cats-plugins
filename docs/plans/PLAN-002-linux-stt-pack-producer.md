@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In progress; Phase 0 authorized by the owner, 2026-11-16. Its lookups and decisions are done; its owner items are open |
+| Status | In progress; Phase 0 authorized by the owner, 2026-11-16, its owner items open. Phase 1 authorized 2026-11-17 and done. On 2026-11-17 the owner asked for the rest to be done straight through, short of the owner items, the license review and any release |
 | Owner | Cats Plugins maintainers |
 | Spec | [SPEC-002](../specs/SPEC-002-linux-stt-pack-producer.md) |
 | Decision | [ADR-002](../decisions/002-produce-native-feature-packs-beside-plugin-content.md) |
@@ -92,18 +92,34 @@ The evidence, and the open questions for later phases, are in the [Phase 0 looku
 
 ## Phase 1 — Recipe, source lock, retained sources (FR-A1–FR-A4)
 
-- [ ] **Layout and schemas (FR-A1, FR-A2).** Create the `packs/linux-stt/` layout
+- [x] **Layout and schemas (FR-A1, FR-A2).** Create the `packs/linux-stt/` layout
   and the `recipe.json` and `source-lock.json` schemas, with validators.
-- [ ] **Fetch and verify (FR-A3).**
+  - Both files take exactly their listed keys.
+  - Values set by later phases stay `null`: the selected model and thread count
+    (measurement), the build image digest and package snapshot (Phase 4).
+  - `bridge/`, `fixtures/` and the notices arrive with Phases 3, 0 (owner) and
+    the license review.
+- [x] **Fetch and verify (FR-A3).**
   - whisper.cpp is fetched by exact commit, and its tree content hash is
     checked.
   - Each model is fetched and its size and SHA-256 are checked.
   - There is no fallback to a branch or "latest".
-- [ ] **Retained source archive (FR-A4).** It is deterministic and contains the
+  - The lock covers the whole tree: 2,039 files. The content hash is the
+    SHA-256 of one line per file, `<git mode> <sha256> <size> <path>`, in UTF-8
+    byte order of the path. Two separate computations agree on
+    `7880c133ac9d1b46a9f24a83f0c60c2d28d1203624a6c0913047951fabc03b7c`.
+  - Git runs with an empty configuration and checks nothing out; files are
+    read from Git objects. Symbolic links and submodules stop the fetch.
+  - A real fetch from GitHub and Hugging Face (`ggml-base-q5_1.bin`) passed on
+    2026-11-17.
+- [x] **Retained source archive (FR-A4).** It is deterministic and contains the
   tree, the bridge, the recipe and the lock.
-- [ ] **The pack command entry point** (`src/packs/cli.mjs`), plus its npm
-  scripts.
-- [ ] **Tests.** Local Git fixtures, with no network, cover each tampering case.
+  - Uncompressed ustar, `linux-stt-<version>-sources.tar`. GNU tar extracts the
+    real archive to a tree with the locked content hash.
+  - The bridge is empty until Phase 3.
+- [x] **The pack command entry point** (`src/packs/cli.mjs`), plus its npm
+  scripts. `npm run pack -- check | fetch | verify-sources linux-stt`.
+- [x] **Tests.** Local Git fixtures, with no network, cover each tampering case.
 
 **Covers:** AC-01.
 
@@ -250,6 +266,7 @@ The evidence, and the open questions for later phases, are in the [Phase 0 looku
 | 2026-11-16 | Plan drafted; no phase started. |
 | 2026-11-16 | The owner authorized Phase 0. Its five lookups are done and recorded; the fixtures and the license review stay with the owner. The candidate models know 99 languages, which FR-B5 does not yet account for. |
 | 2026-11-17 | Under the owner's delegation: SPEC-002 FR-B5 amended for the model's language count; `q5_1` chosen as D3's quantized candidate; the `v1.9.5` pin confirmed. Phase 1 is not authorized. |
+| 2026-11-17 | The owner authorized Phase 1. Recipe, source lock with the whole-tree content hash, verified fetch, retained source archive and `npm run pack` are done; AC-01 is covered by tests. Phase 2 is not authorized. |
 
 ---
 
