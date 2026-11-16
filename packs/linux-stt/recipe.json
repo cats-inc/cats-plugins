@@ -15,7 +15,7 @@
       "ggml-base-q5_1.bin",
       "ggml-tiny.bin"
     ],
-    "selected": "ggml-base.bin"
+    "selected": "ggml-base-q5_1.bin"
   },
   "threads": 4,
   "languageMapping": {
