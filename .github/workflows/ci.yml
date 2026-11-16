@@ -7,9 +7,20 @@ on:
 permissions:
   contents: read
 jobs:
-  # Match the other Cats repos: detect docs-only changes inside the workflow so
-  # required checks still report. Unknown bases and failed detection run CI.
-  # A push to main also skips when its merged pull request passed on the same tree.
+  # Match the other Cats repos: detect documentation-only changes inside the
+  # workflow so required checks still report. Documentation is docs/ plus the
+  # root agent instructions (AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md) while
+  # they still exist at HEAD; deleting or renaming one, or a nested copy, is code.
+  # Code that already passed skips too: the fingerprint covers every tracked file
+  # outside docs/ (the root agent files by path, not content), so a rebase that
+  # only brings in documentation reuses the earlier green run. A pull request's
+  # cache is scoped to that request, so a push to main instead reuses its merged
+  # pull request's run when that run tested the same tree. The required producer
+  # and reproducibility checks still run and pass under their usual names; only
+  # steps are skipped. An unknown base never counts as documentation-only, and a
+  # manual run or failed detection runs every step.
+  # tests/docs-boundary.test.mjs keeps tests and scripts from reading docs/ or
+  # the root agent files.
   changes:
     runs-on: ubuntu-latest
     # Job permissions replace the workflow's: checkout and the merge lookups read
@@ -20,6 +31,7 @@ jobs:
       actions: read
     outputs:
       code: ${{ steps.paths.outputs.code }}
+      fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
       skip: ${{ steps.plan.outputs.skip }}
     steps:
       - uses: actions/checkout@v5
@@ -41,11 +53,39 @@ jobs:
           if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
             # Include both sides of renames across the docs/ boundary.
             changed=$(git diff --no-renames --name-only "$base" HEAD)
-            code_changed=$(git diff --no-renames --name-only "$base" HEAD -- . ':(top,exclude)docs/')
+            # An added or modified root AGENTS.md, CLAUDE.md, CODEX.md or
+            # GEMINI.md is documentation. Any other status, such as the deleted
+            # side of a rename, and nested copies remain code.
+            code_changed=$(git diff --no-renames --name-status "$base" HEAD -- . ':(top,exclude)docs/' |
+              awk '!/^[AM]\t(AGENTS|CLAUDE|CODEX|GEMINI)\.md$/')
             printf 'Changed files:\n%s\n' "$changed"
             if [ -n "$changed" ] && [ -z "$code_changed" ]; then code=false; fi
           fi
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+      - name: Fingerprint the code under test
+        id: fingerprint
+        run: |
+          set -euo pipefail
+          # Mode, blob and path of every tracked file outside docs/. The root
+          # agent files keep their mode, path and presence, with a fixed
+          # placeholder for their content. For a pull request this is the merge
+          # result that the checks would exercise. Unquoted paths keep non-ASCII
+          # docs/ names out.
+          fingerprint=$(git -c core.quotePath=false ls-tree -r --full-tree HEAD |
+            awk -F '\t' -v OFS='\t' '
+              $2 ~ /^docs\// { next }
+              $2 ~ /^(AGENTS|CLAUDE|CODEX|GEMINI)\.md$/ { sub(/ [^ ]*$/, " agent-instructions", $1) }
+              { print }' |
+            sha256sum | cut -d ' ' -f 1)
+          echo "fingerprint=$fingerprint" | tee -a "$GITHUB_OUTPUT"
+      - name: Look for an earlier green run of this exact code
+        id: green
+        if: steps.paths.outputs.code == 'true' && github.event_name != 'workflow_dispatch'
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-green
+          key: ci-green-v1-${{ steps.fingerprint.outputs.fingerprint }}
+          lookup-only: true
       - name: Reuse the merged pull request's green run
         id: merged
         if: github.event_name == 'push' && steps.paths.outputs.code == 'true'
@@ -83,11 +123,12 @@ jobs:
         id: plan
         env:
           CODE: ${{ steps.paths.outputs.code }}
-          TESTED: ${{ steps.merged.outputs.tested }}
+          GREEN: ${{ steps.green.outputs.cache-hit }}
+          MERGED: ${{ steps.merged.outputs.tested }}
         run: |
           set -euo pipefail
           skip=
-          if [ "$CODE" = "false" ]; then skip=docs; elif [ "$TESTED" = "true" ]; then skip=tested; fi
+          if [ "$CODE" = "false" ]; then skip=docs; elif [ "$GREEN" = "true" ] || [ "$MERGED" = "true" ]; then skip=tested; fi
           echo "skip=$skip" | tee -a "$GITHUB_OUTPUT"
 
   producer:
@@ -104,10 +145,12 @@ jobs:
     steps:
       - name: Documentation-only change
         if: env.SKIP == 'docs'
-        run: echo "Only docs/ changed; install, tests, builds and artifact uploads are skipped."
-      - name: Already tested in its pull request
+        run: echo "Only docs/ or root agent instructions (AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md) changed; install, tests, builds and artifact uploads are skipped."
+      # Nothing outside this run downloads its artifacts: they are test outputs,
+      # and reproducibility, their only consumer, skips its comparison too.
+      - name: Already tested
         if: env.SKIP == 'tested'
-        run: echo "The merged pull request passed CI on this exact tree; install, tests, builds and artifact uploads are skipped, and its run holds the artifacts."
+        run: echo "This exact code outside docs/ and the root agent instructions already passed; install, tests, builds and artifact uploads are skipped, and an earlier run built the artifacts."
       - uses: actions/checkout@v5
         if: env.SKIP == ''
       - uses: actions/setup-node@v4
@@ -138,10 +181,10 @@ jobs:
         run: test "$PRODUCER_RESULT" = success
       - name: Documentation-only change
         if: env.SKIP == 'docs'
-        run: echo "Only docs/ changed; there are no package artifacts to compare."
-      - name: Already tested in its pull request
+        run: echo "Only docs/ or root agent instructions (AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md) changed; there are no package artifacts to compare."
+      - name: Already tested
         if: env.SKIP == 'tested'
-        run: echo "The merged pull request compared the artifacts of this exact tree."
+        run: echo "An earlier run compared the artifacts of this exact code outside docs/ and the root agent instructions."
       - uses: actions/download-artifact@v4
         if: env.SKIP == ''
         with:
@@ -154,3 +197,19 @@ jobs:
           set -euo pipefail
           cmp receipts/agency-preview-ubuntu-latest/agency-agents-0.1.0.catsplugin.sha256 receipts/agency-preview-windows-latest/agency-agents-0.1.0.catsplugin.sha256
           cmp receipts/agency-preview-ubuntu-latest/agency-agents-0.1.0.catsplugin.sha256 receipts/agency-preview-macos-latest/agency-agents-0.1.0.catsplugin.sha256
+      # Reached only when every producer and the comparison passed, so the three
+      # producer legs never race on one key. A failed detection leaves no
+      # fingerprint, so nothing is recorded.
+      - name: Record this code as tested
+        if: env.SKIP == '' && needs.changes.outputs.fingerprint != ''
+        env:
+          FINGERPRINT: ${{ needs.changes.outputs.fingerprint }}
+        run: |
+          mkdir -p .ci-green
+          echo "$FINGERPRINT $GITHUB_RUN_ID" > .ci-green/marker
+      - name: Save the tested marker
+        if: env.SKIP == '' && needs.changes.outputs.fingerprint != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .ci-green
+          key: ci-green-v1-${{ needs.changes.outputs.fingerprint }}
