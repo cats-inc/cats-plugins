@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -361,4 +361,12 @@ test('a main push reuses its merged pull request\'s green run only for that exac
   assert.equal(reuse(squash7, '', `7 ${head7}`, '1'), 'tested=false');
   assert.equal(reuse(squash8, base, `8 ${head8}`, '1'), 'tested=false', 'a push of several commits runs every check');
   assert.equal(reuse(squash8, squash7, `8 ${head8}`, '1'), 'tested=false', 'a head without the previous main was tested on other code');
+});
+
+test('the linux-stt release stages its assets in a directory the repository does not have', () => {
+  const release = parse(readFileSync('.github/workflows/release-linux-stt.yml', 'utf8'));
+  const assemble = release.jobs.publish.steps.find(item => item.name === 'Verify and assemble the assets').run;
+  const staging = /^\s*mkdir (\S+)$/mu.exec(assemble)?.[1];
+  assert.ok(staging && !existsSync(staging), `mkdir ${staging} would collide with a tracked directory`);
+  assert.match(release.jobs.publish.steps.at(-1).run, new RegExp(`${staging}/\\*`));
 });
