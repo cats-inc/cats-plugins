@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In progress; Phase 0 authorized by the owner, 2026-11-16. Its lookups are done; its owner items are open |
+| Status | In progress; Phase 0 authorized by the owner, 2026-11-16. Its lookups and decisions are done; its owner items are open |
 | Owner | Cats Plugins maintainers |
 | Spec | [SPEC-002](../specs/SPEC-002-linux-stt-pack-producer.md) |
 | Decision | [ADR-002](../decisions/002-produce-native-feature-packs-beside-plugin-content.md) |
@@ -50,12 +50,15 @@ a release. Each phase starts only after the owner authorizes it.
   BCP 47 primary subtags. Those codes form the recipe's mapping (FR-B5).
   - None of the 100 codes is unregistered; `jw` is deprecated, with preferred
     value `jv`.
-  - The candidate models know 99 of them, without `yue`. FR-B5's "generated
-    from the table" needs the model's count too; see the lookups note.
+  - The candidate models know 99 of them, without `yue`. SPEC-002 FR-B5 was
+    amended on 2026-11-17 to cover the model's count, the mapping rule, the
+    `--locale` check and detection.
 - [x] For each model candidate (ADR-002 D3), record the file name, a
   revision-pinned URL, the size and the SHA-256.
-  - D3 leaves the quantized variant open. `q5_1` is proposed and `q8_0`
-    recorded; the owner chooses.
+  - D3 leaves the quantized variant open. Under the owner's delegation,
+    2026-11-17, `q5_1` is the quantized candidate: it is the smaller file.
+    `q8_0` is recorded only and is not measured.
+  - The `v1.9.5` pin was confirmed under the same delegation.
 - [x] Look up the GitHub-hosted arm64 Linux runner label for this public
   repository, and the dated Ubuntu archive snapshot service.
   - Whether the pinned image can use the HTTPS-only snapshot is a Phase 4
@@ -79,8 +82,8 @@ a release. Each phase starts only after the owner authorizes it.
 | Language mapping | 100 table codes; 0 unregistered; `jw` deprecated → `jv`. Candidates know 99 (ids 0–98, no `yue`) | `src/whisper.cpp`; IANA registry 2026-09-17; model headers | 2026-11-16 |
 | Model revision | `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/<file>` | Upstream download script; Hugging Face API | 2026-11-16 |
 | `ggml-base.bin` | 147,951,465 bytes, SHA-256 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe` | Downloaded and hashed | 2026-11-16 |
-| `ggml-base-q5_1.bin` (proposed) | 59,707,625 bytes, SHA-256 `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898` | Downloaded and hashed | 2026-11-16 |
-| `ggml-base-q8_0.bin` | 81,768,585 bytes, SHA-256 `c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9` | Hugging Face metadata only | 2026-11-16 |
+| `ggml-base-q5_1.bin` (D3's quantized candidate) | 59,707,625 bytes, SHA-256 `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898` | Downloaded and hashed | 2026-11-16 |
+| `ggml-base-q8_0.bin` (not a candidate) | 81,768,585 bytes, SHA-256 `c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9` | Hugging Face metadata only | 2026-11-16 |
 | `ggml-tiny.bin` | 77,691,713 bytes, SHA-256 `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21` | Downloaded and hashed | 2026-11-16 |
 | Runners | arm64 `ubuntu-22.04-arm` / `ubuntu-24.04-arm`, x64 `ubuntu-22.04` / `ubuntu-24.04`; 4 CPU, 16 GB, free for public repositories | GitHub runner reference | 2026-11-16 |
 | Package snapshot | `https://snapshot.ubuntu.com/ubuntu/<YYYYMMDDTHHMMSSZ>`, HTTPS only; serves `jammy` amd64 and arm64 (arm64 undocumented, probed at one id); `ubuntu-ports` is not public; retention at least 2 years | snapshot.ubuntu.com; HTTP probes | 2026-11-16 |
@@ -246,6 +249,7 @@ The evidence, and the open questions for later phases, are in the [Phase 0 looku
 | --- | --- |
 | 2026-11-16 | Plan drafted; no phase started. |
 | 2026-11-16 | The owner authorized Phase 0. Its five lookups are done and recorded; the fixtures and the license review stay with the owner. The candidate models know 99 languages, which FR-B5 does not yet account for. |
+| 2026-11-17 | Under the owner's delegation: SPEC-002 FR-B5 amended for the model's language count; `q5_1` chosen as D3's quantized candidate; the `v1.9.5` pin confirmed. Phase 1 is not authorized. |
 
 ---
 

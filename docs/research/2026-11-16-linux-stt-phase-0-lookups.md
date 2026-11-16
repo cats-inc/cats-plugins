@@ -118,11 +118,11 @@ warning settings, so the defaults below are ggml's own.
   - The rest are current primary language subtags. Some are macrolanguages,
     such as `zh`, `ar` and `no`, which are still valid primary subtags.
 - **Proposed rule for the mapping (FR-B5).** A whisper.cpp code that is
-  unregistered or deprecated maps to its registry `Preferred-Value`. This rule
-  is a proposal for Phase 1, not a SPEC-002 requirement.
+  unregistered or deprecated maps to its registry `Preferred-Value`. SPEC-002
+  FR-B5 adopted this rule on 2026-11-17.
   - Today that is one entry: `jw` ↔ `jv`.
-- **The candidates know 99 languages, not 100.** This is a gap in FR-B5's
-  wording, raised here rather than edited into SPEC-002.
+- **The candidates know 99 languages, not 100.** This was a gap in FR-B5's
+  wording; FR-B5 was amended on 2026-11-17.
   - Every candidate's header has `n_vocab` 51865 (Bytes; read from bytes 4–7
     of each file).
   - whisper.cpp derives a multilingual model's language count as
@@ -134,7 +134,7 @@ warning settings, so the defaults below are ggml's own.
     `token_sot + 1 + id` without checking the model's count, so `yue` on these
     models becomes the translate token. Language detection also scores `yue`
     from that token's logit (Source).
-  - **For Phase 1 and Phase 3:**
+  - **For Phase 1 and Phase 3** (adopted into SPEC-002 FR-B5, 2026-11-17):
     - `languages` should be the table entries whose id is below the selected
       model's count;
     - the helper should reject a `--locale` outside them;
@@ -154,8 +154,9 @@ warning settings, so the defaults below are ggml's own.
      `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe`
      (Bytes: downloaded from the pinned URL and hashed).
   2. **A quantized multilingual base.** D3 does not name the variant. Both are
-     recorded, and the choice is the owner's.
-     - **`ggml-base-q5_1.bin` (proposed):** 59,707,625 bytes, SHA-256
+     recorded. Under the owner's delegation, 2026-11-17, `q5_1` is the
+     candidate.
+     - **`ggml-base-q5_1.bin` (chosen):** 59,707,625 bytes, SHA-256
        `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898`
        (Bytes). It is the smaller of the two quantized files; neither has been
        measured yet (FR-E2).
