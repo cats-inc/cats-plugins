@@ -1,8 +1,18 @@
 # Cats Plugins
 
-Pinned upstream capabilities, packaged for the Cats ecosystem.
+Pinned upstream capabilities, packaged for the Cats ecosystem: managed Plugins
+and native feature packs.
 
 ## Current status
+
+**Feature pack `linux-stt`.** Offline Linux dictation for Cats Desktop and Bot: a
+Cats helper (`packs/linux-stt/bridge/`) built with whisper.cpp in a pinned
+`ubuntu:22.04` image, plus a Whisper model, packed as a `.catspack` with its
+manifest and the lock fragment Desktop copies. `npm run pack` fetches and
+verifies the locked sources, builds without a network, checks the binary and
+writes the outputs; see [testing](docs/testing.md). CI builds x64 and arm64
+and runs the protocol tests in containers without a network. Releases need the
+owner's authorization (SPEC-002 FR-F2).
 
 The first producer MVP packages Agency Agents' **Code Reviewer** and **UX Researcher**
 as namespaced instruction skills. It retains the reviewed upstream commit, reuses

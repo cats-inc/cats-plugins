@@ -217,7 +217,7 @@ test('the fingerprint covers code outside docs/ and root agent files by path, no
 });
 
 test('an earlier green run is found by fingerprint and recorded only after every check passed', () => {
-  assert.deepEqual(Object.keys(workflow.jobs), ['changes', 'producer', 'reproducibility']);
+  assert.deepEqual(Object.keys(workflow.jobs), ['changes', 'producer', 'linux-stt', 'reproducibility']);
   assert.deepEqual(workflow.jobs.producer.strategy.matrix.os, ['ubuntu-latest', 'windows-latest', 'macos-latest']);
   const changes = workflow.jobs.changes;
   assert.equal(changes.outputs.fingerprint, '${{ steps.fingerprint.outputs.fingerprint }}');
@@ -236,7 +236,7 @@ test('an earlier green run is found by fingerprint and recorded only after every
   assert.ok(!producer.some(item => String(item.uses).startsWith('actions/cache/')),
     'producer legs never save the marker before every leg passed');
   const reproducibility = workflow.jobs.reproducibility;
-  assert.deepEqual(reproducibility.needs, ['changes', 'producer']);
+  assert.deepEqual(reproducibility.needs, ['changes', 'producer', 'linux-stt']);
   const steps = reproducibility.steps;
   const compare = steps.findIndex(item => item.name === 'Compare artifact hashes across operating systems');
   const record = steps.findIndex(item => item.name === 'Record this code as tested');
@@ -252,13 +252,34 @@ test('an earlier green run is found by fingerprint and recorded only after every
     'a failed detection runs every step');
 });
 
+test('the linux-stt jobs follow the skip plan and build without a network on each architecture', () => {
+  const job = workflow.jobs['linux-stt'];
+  assert.deepEqual(job.needs, 'changes');
+  assert.deepEqual(job.strategy.matrix.include, [
+    { arch: 'x64', runner: 'ubuntu-24.04' }, { arch: 'arm64', runner: 'ubuntu-24.04-arm' },
+  ]);
+  assert.equal(job['runs-on'], "${{ needs.changes.result == 'success' && needs.changes.outputs.skip != '' && 'ubuntu-latest' || matrix.runner }}",
+    'a skip allocates no native runner');
+  assert.equal(job.env.SKIP, workflow.jobs.producer.env.SKIP);
+  const work = job.steps.filter(item => !['Documentation-only change', 'Already tested'].includes(item.name));
+  assert.ok(work.every(item => item.if === "env.SKIP == ''"), 'every work step honours the skip');
+  const build = job.steps.find(item => item.name === 'Build without a network');
+  assert.match(build.run, /unshare --net/);
+  assert.match(build.run, /--sources inputs\/linux-stt-\*-sources\.tar --models inputs\/models/);
+  assert.ok(job.steps.some(item => /scripts\/linux-stt-protocol\.mjs/.test(item.run ?? '')));
+  assert.ok(!job.steps.some(item => String(item.uses).startsWith('actions/cache/')), 'only reproducibility records a green run');
+});
+
 test('required reproducibility gate rejects failed, cancelled or missing producers', () => {
   const gate = workflow.jobs.reproducibility.steps[0].run;
-  const check = result => spawnSync(bash, ['-e', '-o', 'pipefail', '-c', gate], {
-    env: { ...process.env, PRODUCER_RESULT: result },
+  const check = (producer, linuxStt = 'success') => spawnSync(bash, ['-e', '-o', 'pipefail', '-c', gate], {
+    env: { ...process.env, PRODUCER_RESULT: producer, LINUX_STT_RESULT: linuxStt },
   }).status;
   assert.equal(check('success'), 0);
-  for (const result of ['failure', 'cancelled', 'skipped', '']) assert.notEqual(check(result), 0);
+  for (const result of ['failure', 'cancelled', 'skipped', '']) {
+    assert.notEqual(check(result), 0);
+    assert.notEqual(check('success', result), 0);
+  }
 });
 
 function runStep(script, cwd, env) {

@@ -19,7 +19,22 @@ Feature pack commands are separate from the Plugin build:
 npm run pack -- check linux-stt
 npm run pack -- fetch linux-stt --out NEW_DIR [--model FILE|all]
 npm run pack -- verify-sources linux-stt NEW_DIR/linux-stt-0.1.0-sources.tar
+npm run pack -- environment linux-stt
+npm run pack -- build linux-stt --out OUT_DIR [--model FILE] [--sources TAR --models DIR]
+npm run pack -- verify linux-stt OUT_DIR/linux-stt-0.1.0-linux-ARCH.catspack OUT_DIR/lock-entry-ARCH.json
+node scripts/linux-stt-protocol.mjs PACK SOURCES_TAR ENVIRONMENT_IMAGE
+node scripts/linux-stt-measure.mjs PACK SOURCES_TAR [FIXTURE.wav ...]
 ```
+
+`environment` creates the build image from the recipe's pinned `ubuntu:22.04`
+digest and dated Ubuntu snapshot; it needs Docker and the network. `build`
+builds for the host's architecture: with `--sources` and `--models` it reads
+only verified local inputs, and the compile always runs in a container with
+networking disabled. It checks the helper's ELF machine, `NEEDED`, glibc
+symbol versions and socket API use, then writes the `.catspack`, its
+`.sha256`, the manifest copy, the build receipt, the lock fragment and the
+source archive. The protocol and measurement scripts are Linux-only and are not
+part of `npm test`.
 
 `fetch` needs the network. It fetches the locked whisper.cpp commit by hash
 (never a branch or tag), checks its tree id, file count and content hash, and

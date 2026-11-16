@@ -15,7 +15,7 @@
 ## Project Metadata
 
 - Type: single-project
-- Purpose: produce managed Cats Plugin recipes, retained upstream sources and preview artifacts.
+- Purpose: produce managed Cats Plugin recipes and native feature packs (such as `linux-stt`), with retained upstream sources and preview artifacts.
 - Entry points: `src/cli.mjs`, `scripts/import-agency.mjs` (maintainer import only).
 - Stack and versions: Node.js 24 ESM, pinned fflate/YAML, upstream Bash converter.
 - Test command: `npm test`; full producer checks: `npm run check`.

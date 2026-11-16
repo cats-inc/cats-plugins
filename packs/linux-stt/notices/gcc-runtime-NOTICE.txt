@@ -1,0 +1,10 @@
+cats-stt-linux links the GCC C++ runtime (libstdc++) and libgcc statically.
+These libraries are distributed under the GNU General Public License,
+version 3, with the GCC Runtime Library Exception, version 3.1. The exception
+permits distributing the resulting program under terms of the distributor's
+choice. The license texts are available at:
+
+- https://www.gnu.org/licenses/gpl-3.0.html
+- https://www.gnu.org/licenses/gcc-exception-3.1.html
+
+The compiler version used for this build is recorded in the build receipt.
