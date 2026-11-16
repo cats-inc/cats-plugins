@@ -32,6 +32,8 @@ Downloadable CI artifacts are test outputs, not releases.
 | `plugins/agency-agents/source-lock.json` | Full upstream commit, file sizes and hashes |
 | `plugins/agency-agents/upstream/` | Five original Git blobs retained for offline builds |
 | `src/` | Converter bridge, preview packaging and verification |
+| `packs/linux-stt/` | Feature pack recipe and source lock: whisper.cpp commit, tree and content hash, model candidates |
+| `src/packs/` | Feature pack commands (`npm run pack`): lock checks, verified fetch, retained source archive |
 | `scripts/import-agency.mjs` | Explicit maintainer import from a reviewed Git checkout |
 | `tests/` | Isolated packaging, tamper and boundary checks |
 | `skills/` | Developer workflows only; never packaged product roles |
