@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft; D1–D3 resolved under the owner's delegation, 2026-11-16 |
+| **Status** | Draft; D1–D3 resolved under the owner's delegation, 2026-11-16; FR-B5 amended after PLAN-002 Phase 0, 2026-11-17 |
 | **Owner** | Cats Plugins maintainers |
 | **Reviewer** | Product owner |
 | **Decision** | [ADR-002](../decisions/002-produce-native-feature-packs-beside-plugin-content.md) |
@@ -152,9 +152,18 @@ Reliability requirement.
 
 - `languages` in the manifest is generated at build time from the pinned
   whisper.cpp language table, never written by hand.
+- It lists only the table entries the pinned model knows: those whose id is
+  below the model's language count, which whisper.cpp derives from the model's
+  vocabulary size. The base and tiny models know 99, without `yue`.
 - Where whisper.cpp's code is not a valid BCP 47 primary subtag, the recipe's
   language mapping translates it. The helper maps it back.
-- Without `--locale`, whisper.cpp detects the language.
+  - A code that is unregistered or deprecated in the IANA registry maps to its
+    `Preferred-Value`. At the pinned commit that is `jw` ↔ `jv`.
+- The helper rejects a `--locale` outside `languages` with
+  `language_not_supported`, before whisper.cpp sees it. whisper.cpp does not
+  check the id against the model.
+- Without `--locale`, the helper detects the language, choosing only among the
+  model's languages, and passes the result to whisper.cpp explicitly.
 - There is no prompt hint, no script conversion and no system-locale fallback.
 
 **FR-B6 — Linking.**
