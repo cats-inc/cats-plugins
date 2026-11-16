@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | In progress; Phase 0 authorized by the owner, 2026-11-16. Its lookups are done; its owner items are open |
 | Owner | Cats Plugins maintainers |
 | Spec | [SPEC-002](../specs/SPEC-002-linux-stt-pack-producer.md) |
 | Decision | [ADR-002](../decisions/002-produce-native-feature-packs-beside-plugin-content.md) |
@@ -34,19 +34,32 @@ a release. Each phase starts only after the owner authorizes it.
 
 ## Phase 0 — Lookups and owner prerequisites
 
-- [ ] Choose the whisper.cpp commit through a source-lock review, and record the
-  review.
-- [ ] Look up whisper.cpp's build options for:
+- [x] Choose the whisper.cpp commit through a source-lock review, and record the
+  review. `v1.9.5`, commit `d1be6fde11ac6e0407606b4e42fe72d34add8037`; the
+  review is in the [Phase 0 lookups](../research/2026-11-16-linux-stt-phase-0-lookups.md).
+- [x] Look up whisper.cpp's build options for:
   - a static library;
   - no targeting of the build machine's CPU;
   - no OpenMP, BLAS or GPU;
   - the x86-64-v3 and ARMv8.2-A (dot product, FP16) baselines (SPEC-002 D1).
-- [ ] Find whisper.cpp's language table, and list the codes that are not valid
+
+  Read from source and not yet configured. `GGML_OPENMP` and `GGML_NATIVE`
+  default to on and must be turned off, and `GGML_STATIC` must stay off,
+  since it links glibc statically.
+- [x] Find whisper.cpp's language table, and list the codes that are not valid
   BCP 47 primary subtags. Those codes form the recipe's mapping (FR-B5).
-- [ ] For each model candidate (ADR-002 D3), record the file name, a
+  - None of the 100 codes is unregistered; `jw` is deprecated, with preferred
+    value `jv`.
+  - The candidate models know 99 of them, without `yue`. FR-B5's "generated
+    from the table" needs the model's count too; see the lookups note.
+- [x] For each model candidate (ADR-002 D3), record the file name, a
   revision-pinned URL, the size and the SHA-256.
-- [ ] Look up the GitHub-hosted arm64 Linux runner label for this public
+  - D3 leaves the quantized variant open. `q5_1` is proposed and `q8_0`
+    recorded; the owner chooses.
+- [x] Look up the GitHub-hosted arm64 Linux runner label for this public
   repository, and the dated Ubuntu archive snapshot service.
+  - Whether the pinned image can use the HTTPS-only snapshot is a Phase 4
+    question.
 - [ ] **Owner:** record the speech fixtures (SPEC-002 D3) with written
   permission, and a provenance file covering speaker, date, language and
   permission:
@@ -61,6 +74,18 @@ a release. Each phase starts only after the owner authorizes it.
 
 | Item | Finding | Source | Date |
 | --- | --- | --- | --- |
+| whisper.cpp | `https://github.com/ggml-org/whisper.cpp`, tag `v1.9.5`, commit `d1be6fde11ac6e0407606b4e42fe72d34add8037`, tree `6fe2755682242a5c01aba65a22b3c0305d747841`; MIT; no submodules or build-time downloads with the options below | Pinned tree; GitHub API | 2026-11-16 |
+| Build options | `BUILD_SHARED_LIBS=OFF`, `GGML_STATIC=OFF`, `GGML_NATIVE=OFF`, `GGML_OPENMP=OFF`, `GGML_BLAS=OFF`, `GGML_LLAMAFILE=OFF`, GPU backends `OFF`, `GGML_BACKEND_DL=OFF`; x64 `GGML_SSE42`, `GGML_AVX`, `GGML_AVX2`, `GGML_FMA`, `GGML_F16C`, `GGML_BMI2` on, AVX-512, AVX-VNNI and AMX off; arm64 `GGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16` | CMake files at the pinned commit (not configured) | 2026-11-16 |
+| Language mapping | 100 table codes; 0 unregistered; `jw` deprecated → `jv`. Candidates know 99 (ids 0–98, no `yue`) | `src/whisper.cpp`; IANA registry 2026-09-17; model headers | 2026-11-16 |
+| Model revision | `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/<file>` | Upstream download script; Hugging Face API | 2026-11-16 |
+| `ggml-base.bin` | 147,951,465 bytes, SHA-256 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe` | Downloaded and hashed | 2026-11-16 |
+| `ggml-base-q5_1.bin` (proposed) | 59,707,625 bytes, SHA-256 `422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898` | Downloaded and hashed | 2026-11-16 |
+| `ggml-base-q8_0.bin` | 81,768,585 bytes, SHA-256 `c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9` | Hugging Face metadata only | 2026-11-16 |
+| `ggml-tiny.bin` | 77,691,713 bytes, SHA-256 `be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21` | Downloaded and hashed | 2026-11-16 |
+| Runners | arm64 `ubuntu-22.04-arm` / `ubuntu-24.04-arm`, x64 `ubuntu-22.04` / `ubuntu-24.04`; 4 CPU, 16 GB, free for public repositories | GitHub runner reference | 2026-11-16 |
+| Package snapshot | `https://snapshot.ubuntu.com/ubuntu/<YYYYMMDDTHHMMSSZ>`, HTTPS only; serves `jammy` amd64 and arm64 (arm64 undocumented, probed at one id); `ubuntu-ports` is not public; retention at least 2 years | snapshot.ubuntu.com; HTTP probes | 2026-11-16 |
+
+The evidence, and the open questions for later phases, are in the [Phase 0 lookups](../research/2026-11-16-linux-stt-phase-0-lookups.md).
 
 ## Phase 1 — Recipe, source lock, retained sources (FR-A1–FR-A4)
 
@@ -220,6 +245,7 @@ a release. Each phase starts only after the owner authorizes it.
 | Date | Update |
 | --- | --- |
 | 2026-11-16 | Plan drafted; no phase started. |
+| 2026-11-16 | The owner authorized Phase 0. Its five lookups are done and recorded; the fixtures and the license review stay with the owner. The candidate models know 99 languages, which FR-B5 does not yet account for. |
 
 ---
 
