@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { parse } from 'yaml';
 
 const workflow = parse(readFileSync('.github/workflows/ci.yml', 'utf8'));
-const detector = workflow.jobs.changes.steps.find((step) => step.id === 'paths').run;
+const step = (id) => workflow.jobs.changes.steps.find((item) => item.id === id);
+const detector = step('paths').run;
 const bash = process.platform === 'win32'
   ? resolve(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), '../../../bin/bash.exe')
   : 'bash';
@@ -101,6 +102,156 @@ test('workflow compares the PR merge to its current base and defaults to full ch
   assert.equal(f.detect('pull_request'), 'code=true');
 });
 
+test('root agent instructions count as documentation only while they still exist at HEAD', t => {
+  const f = fixture(t);
+  f.write('AGENTS.md');
+  f.write('CLAUDE.md');
+  const added = f.commit();
+  assert.equal(f.detect('push', f.base), 'code=false', 'adding root agent files is documentation');
+
+  f.write('AGENTS.md', 'edited\n');
+  const edited = f.commit();
+  assert.equal(f.detect('push', added), 'code=false', 'an AGENTS.md-only edit is documentation');
+
+  f.write('CODEX.md');
+  f.write('GEMINI.md');
+  f.write('docs/guide.md');
+  const withDocs = f.commit();
+  assert.equal(f.detect('push', edited), 'code=false', 'agent files and docs/ together are documentation');
+
+  f.write('docs/使用說明.md');
+  const unicodeDocs = f.commit();
+  assert.equal(f.detect('push', withDocs), 'code=false', 'a non-ASCII docs/ path is documentation');
+
+  f.write('AGENTS.md', 'edited with code\n');
+  f.write('src/code.ts', 'changed\n');
+  const withCode = f.commit();
+  assert.equal(f.detect('push', unicodeDocs), 'code=true');
+
+  f.git('rm', '--quiet', 'CLAUDE.md');
+  const deleted = f.commit();
+  assert.equal(f.detect('push', withCode), 'code=true', 'a deleted root CLAUDE.md is code');
+
+  f.git('mv', 'GEMINI.md', 'docs/GEMINI.md');
+  const renamed = f.commit();
+  assert.equal(f.detect('push', deleted), 'code=true', 'renaming a root agent file away is code');
+
+  f.write('sub/AGENTS.md');
+  const nested = f.commit();
+  assert.equal(f.detect('push', renamed), 'code=true', 'a nested sub/AGENTS.md is code');
+  f.write('sub/AGENTS.md', 'edited\n');
+  f.commit();
+  assert.equal(f.detect('push', nested), 'code=true', 'editing a nested sub/AGENTS.md is code');
+
+  f.git('switch', '--quiet', '-c', 'agents-change');
+  f.write('CODEX.md', 'reviewed\n');
+  f.commit();
+  f.git('switch', '--quiet', 'main');
+  f.write('src/code.ts', 'new base code\n');
+  f.commit();
+  f.git('merge', '--no-ff', 'agents-change', '-m', 'synthetic agent instructions PR merge');
+  assert.equal(f.detect('pull_request'), 'code=false');
+
+  // Replace the root AGENTS.md with a symbolic link in the index only.
+  const merge = f.git('rev-parse', 'HEAD');
+  const target = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: f.root, input: 'README.md', encoding: 'utf8' }).trim();
+  f.git('update-index', '--cacheinfo', `120000,${target},AGENTS.md`);
+  f.git('commit', '-m', 'agent file type change');
+  assert.equal(f.detect('push', merge), 'code=true', 'a type change of a root agent file is code');
+});
+
+test('the fingerprint covers code outside docs/ and root agent files by path, not content', t => {
+  const fingerprint = step('fingerprint').run;
+  if (spawnSync(bash, ['-c', 'command -v sha256sum']).status !== 0) {
+    t.skip('sha256sum is not available');
+    return;
+  }
+  const f = fixture(t);
+  // Hosted runners quote non-ASCII paths by default; the step must undo that.
+  f.git('config', 'core.quotePath', 'true');
+  const print = () => {
+    const output = runStep(fingerprint, f.root, {});
+    assert.match(output, /^fingerprint=[0-9a-f]{64}$/u);
+    return output;
+  };
+  f.write('AGENTS.md');
+  f.write('CLAUDE.md');
+  f.write('sub/AGENTS.md');
+  f.write('docs/guide.md');
+  f.write('docs/使用說明.md');
+  f.commit();
+  const initial = print();
+
+  f.write('AGENTS.md', 'edited\n');
+  f.write('CLAUDE.md', 'edited\n');
+  f.write('docs/guide.md', 'edited\n');
+  f.write('docs/使用說明.md', 'edited\n');
+  f.write('docs/new.md');
+  f.commit();
+  assert.equal(print(), initial, 'documentation and root agent file edits keep the fingerprint');
+
+  f.write('GEMINI.md');
+  f.commit();
+  const withGemini = print();
+  assert.notEqual(withGemini, initial, 'adding a root agent file changes its presence');
+
+  f.git('rm', '--quiet', 'CLAUDE.md');
+  f.commit();
+  const deleted = print();
+  assert.notEqual(deleted, withGemini, 'deleting a root agent file changes its presence');
+
+  chmodSync(join(f.root, 'AGENTS.md'), 0o755);
+  f.git('update-index', '--chmod=+x', 'AGENTS.md');
+  f.commit();
+  const executable = print();
+  assert.notEqual(executable, deleted, 'a root agent file keeps its mode');
+
+  f.write('sub/AGENTS.md', 'edited\n');
+  f.commit();
+  const nested = print();
+  assert.notEqual(nested, executable, 'a nested sub/AGENTS.md is code');
+
+  f.write('src/code.ts', 'changed\n');
+  f.commit();
+  assert.notEqual(print(), nested, 'code changes change the fingerprint');
+});
+
+test('an earlier green run is found by fingerprint and recorded only after every check passed', () => {
+  assert.deepEqual(Object.keys(workflow.jobs), ['changes', 'producer', 'reproducibility']);
+  assert.deepEqual(workflow.jobs.producer.strategy.matrix.os, ['ubuntu-latest', 'windows-latest', 'macos-latest']);
+  const changes = workflow.jobs.changes;
+  assert.equal(changes.outputs.fingerprint, '${{ steps.fingerprint.outputs.fingerprint }}');
+  assert.deepEqual(changes.steps.map(item => item.id).filter(Boolean), ['paths', 'fingerprint', 'green', 'merged', 'plan']);
+  const green = step('green');
+  assert.equal(green.uses, 'actions/cache/restore@v4');
+  assert.equal(green.if, "steps.paths.outputs.code == 'true' && github.event_name != 'workflow_dispatch'",
+    'manual runs and documentation-only changes never look up a marker');
+  assert.deepEqual(green.with, {
+    path: '.ci-green', key: 'ci-green-v1-${{ steps.fingerprint.outputs.fingerprint }}', 'lookup-only': true,
+  });
+  assert.equal(step('plan').env.GREEN, '${{ steps.green.outputs.cache-hit }}');
+  assert.equal(step('plan').env.MERGED, '${{ steps.merged.outputs.tested }}');
+
+  const producer = workflow.jobs.producer.steps;
+  assert.ok(!producer.some(item => String(item.uses).startsWith('actions/cache/')),
+    'producer legs never save the marker before every leg passed');
+  const reproducibility = workflow.jobs.reproducibility;
+  assert.deepEqual(reproducibility.needs, ['changes', 'producer']);
+  const steps = reproducibility.steps;
+  const compare = steps.findIndex(item => item.name === 'Compare artifact hashes across operating systems');
+  const record = steps.findIndex(item => item.name === 'Record this code as tested');
+  const save = steps.findIndex(item => item.name === 'Save the tested marker');
+  assert.ok(compare > 0 && record === compare + 1 && save === steps.length - 1 && save === record + 1);
+  for (const item of [steps[record], steps[save]]) {
+    assert.equal(item.if, "env.SKIP == '' && needs.changes.outputs.fingerprint != ''");
+  }
+  assert.equal(steps[record].env.FINGERPRINT, '${{ needs.changes.outputs.fingerprint }}');
+  assert.equal(steps[save].uses, 'actions/cache/save@v4');
+  assert.deepEqual(steps[save].with, { path: '.ci-green', key: 'ci-green-v1-${{ needs.changes.outputs.fingerprint }}' });
+  assert.equal(reproducibility.env.SKIP, "${{ needs.changes.result == 'success' && needs.changes.outputs.skip || '' }}",
+    'a failed detection runs every step');
+});
+
 test('required reproducibility gate rejects failed, cancelled or missing producers', () => {
   const gate = workflow.jobs.reproducibility.steps[0].run;
   const check = result => spawnSync(bash, ['-e', '-o', 'pipefail', '-c', gate], {
@@ -124,18 +275,20 @@ function runStep(script, cwd, env) {
   }
 }
 
-test('the plan skips docs-only changes first, then a merged pull request that already passed', () => {
-  const plan = workflow.jobs.changes.steps.find((step) => step.id === 'plan').run;
-  const decide = (code, tested) => runStep(plan, process.cwd(), { CODE: code, TESTED: tested });
-  assert.equal(decide('false', ''), 'skip=docs');
-  assert.equal(decide('false', 'true'), 'skip=docs');
-  assert.equal(decide('true', 'true'), 'skip=tested');
-  assert.equal(decide('true', 'false'), 'skip=');
-  assert.equal(decide('true', ''), 'skip=', 'a skipped lookup runs every check');
+test('the plan skips docs-only changes first, then code that already passed', () => {
+  const decide = (code, green, merged) => runStep(step('plan').run, process.cwd(), {
+    CODE: code, GREEN: green, MERGED: merged,
+  });
+  assert.equal(decide('false', '', ''), 'skip=docs');
+  assert.equal(decide('false', 'true', 'true'), 'skip=docs');
+  assert.equal(decide('true', 'true', ''), 'skip=tested');
+  assert.equal(decide('true', '', 'true'), 'skip=tested');
+  assert.equal(decide('true', 'false', 'false'), 'skip=');
+  assert.equal(decide('true', '', ''), 'skip=', 'skipped lookups run every check');
 });
 
 test('a main push reuses its merged pull request\'s green run only for that exact tree on the previous main', t => {
-  const merged = workflow.jobs.changes.steps.find((step) => step.id === 'merged');
+  const merged = step('merged');
   assert.equal(merged.if, "github.event_name == 'push' && steps.paths.outputs.code == 'true'");
   assert.deepEqual(workflow.jobs.changes.permissions, { contents: 'read', 'pull-requests': 'read', actions: 'read' });
   const root = mkdtempSync(join(tmpdir(), 'cats-ci-merged-'));
