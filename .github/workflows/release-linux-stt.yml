@@ -70,23 +70,23 @@ jobs:
         run: |
           set -euo pipefail
           version=$(node -p "require('./packs/linux-stt/recipe.json').version")
-          mkdir assets
+          mkdir release-assets
           for arch in x64 arm64; do
             dir="built/linux-stt-$arch"
             node src/packs/cli.mjs verify linux-stt "$dir/linux-stt-$version-linux-$arch.catspack" "$dir/lock-entry-$arch.json"
             (cd "$dir" && sha256sum -c "linux-stt-$version-linux-$arch.catspack.sha256")
             cp "$dir/linux-stt-$version-linux-$arch.catspack" "$dir/linux-stt-$version-linux-$arch.catspack.sha256" \
-              "$dir/feature-pack-linux-$arch.json" "$dir/build-receipt-linux-$arch.json" "$dir/lock-entry-$arch.json" assets/
+              "$dir/feature-pack-linux-$arch.json" "$dir/build-receipt-linux-$arch.json" "$dir/lock-entry-$arch.json" release-assets/
           done
           # One source archive: both architectures retain the same bytes.
           cmp "built/linux-stt-x64/linux-stt-$version-sources.tar" "built/linux-stt-arm64/linux-stt-$version-sources.tar"
-          cp "built/linux-stt-x64/linux-stt-$version-sources.tar" "built/linux-stt-x64/linux-stt-$version-sources.tar.sha256" assets/
-          cp packs/linux-stt/notices/*.txt assets/
-          ls -l assets
+          cp "built/linux-stt-x64/linux-stt-$version-sources.tar" "built/linux-stt-x64/linux-stt-$version-sources.tar.sha256" release-assets/
+          cp packs/linux-stt/notices/*.txt release-assets/
+          ls -l release-assets
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file packs/linux-stt/RELEASE-NOTES.md assets/*
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file packs/linux-stt/RELEASE-NOTES.md release-assets/*
