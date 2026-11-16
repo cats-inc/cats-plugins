@@ -17,8 +17,8 @@ Unless a change is documentation only or already passed (below), CI runs this
 suite on Node.js 24 across Ubuntu, Windows and macOS, retains the three preview
 artifacts for 14 days, then compares their SHA-256 sidecars. Documentation is root `docs/` plus the root
 agent instructions (`AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `GEMINI.md`) when they
-are added or modified. Deleting or renaming one of those four, or changing a
-nested `AGENTS.md`, counts as code. Tests, scripts and application sources must
+are added or modified. Deleting, renaming or changing the file type of one of
+those four, or changing a nested `AGENTS.md`, counts as code. Tests, scripts and application sources must
 not read their content; checking that one exists is allowed.
 
 Like the other Cats repositories, a `changes` job detects documentation-only

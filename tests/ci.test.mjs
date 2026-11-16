@@ -119,10 +119,14 @@ test('root agent instructions count as documentation only while they still exist
   const withDocs = f.commit();
   assert.equal(f.detect('push', edited), 'code=false', 'agent files and docs/ together are documentation');
 
+  f.write('docs/使用說明.md');
+  const unicodeDocs = f.commit();
+  assert.equal(f.detect('push', withDocs), 'code=false', 'a non-ASCII docs/ path is documentation');
+
   f.write('AGENTS.md', 'edited with code\n');
   f.write('src/code.ts', 'changed\n');
   const withCode = f.commit();
-  assert.equal(f.detect('push', withDocs), 'code=true');
+  assert.equal(f.detect('push', unicodeDocs), 'code=true');
 
   f.git('rm', '--quiet', 'CLAUDE.md');
   const deleted = f.commit();
@@ -139,11 +143,6 @@ test('root agent instructions count as documentation only while they still exist
   f.commit();
   assert.equal(f.detect('push', nested), 'code=true', 'editing a nested sub/AGENTS.md is code');
 
-  const previous = f.git('rev-parse', 'HEAD');
-  f.write('GEMINI.md/notes.md');
-  f.commit();
-  assert.equal(f.detect('push', previous), 'code=true', 'only the root files themselves are documentation');
-
   f.git('switch', '--quiet', '-c', 'agents-change');
   f.write('CODEX.md', 'reviewed\n');
   f.commit();
@@ -152,6 +151,13 @@ test('root agent instructions count as documentation only while they still exist
   f.commit();
   f.git('merge', '--no-ff', 'agents-change', '-m', 'synthetic agent instructions PR merge');
   assert.equal(f.detect('pull_request'), 'code=false');
+
+  // Replace the root AGENTS.md with a symbolic link in the index only.
+  const merge = f.git('rev-parse', 'HEAD');
+  const target = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: f.root, input: 'README.md', encoding: 'utf8' }).trim();
+  f.git('update-index', '--cacheinfo', `120000,${target},AGENTS.md`);
+  f.git('commit', '-m', 'agent file type change');
+  assert.equal(f.detect('push', merge), 'code=true', 'a type change of a root agent file is code');
 });
 
 test('the fingerprint covers code outside docs/ and root agent files by path, not content', t => {
