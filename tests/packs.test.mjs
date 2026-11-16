@@ -144,8 +144,8 @@ test('the checked-in recipe and lock validate, with the measured model and the p
   const pack = loadPack(root);
   assert.equal(pack.lock.whisper.commit, 'd1be6fde11ac6e0407606b4e42fe72d34add8037');
   assert.deepEqual(pack.recipe.models.candidates, pack.lock.models.map(model => model.file));
-  // ADR-002 D3: the first candidate that passes the reference-board measurement.
-  assert.equal(pack.recipe.models.selected, 'ggml-base.bin');
+  // The owner chose q5_1 over base for its download size; both passed ADR-154 D4.
+  assert.equal(pack.recipe.models.selected, 'ggml-base-q5_1.bin');
   assert.equal(pack.recipe.threads, 4);
   assert.match(pack.recipe.build.image, /^ubuntu:22\.04@sha256:[a-f0-9]{64}$/);
   assert.match(pack.recipe.build.packageSnapshot, /^\d{8}T\d{6}Z$/);
