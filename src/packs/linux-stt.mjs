@@ -132,5 +132,5 @@ export function verifySourceArchive(bytes, pack, bridge) {
   for (const [file, data] of expected) requireThat(rest.get(file).equals(data), `Source archive content mismatch: ${file}`);
   requireThat(whisper.length === pack.lock.whisper.files && contentSha256(whisper) === pack.lock.whisper.contentSha256,
     'Source archive whisper.cpp tree does not match the lock');
-  return { sha256: sha256(bytes), bytes: bytes.length, files: entries.length };
+  return { sha256: sha256(bytes), bytes: bytes.length, files: entries.length, whisper };
 }

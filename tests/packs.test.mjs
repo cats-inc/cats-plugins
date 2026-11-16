@@ -140,13 +140,15 @@ test('symbolic links and submodules in the upstream tree stop the read', t => {
 const recipe = () => JSON.parse(readFileSync(path.join(root, 'packs/linux-stt/recipe.json'), 'utf8'));
 const lock = () => JSON.parse(readFileSync(path.join(root, 'packs/linux-stt/source-lock.json'), 'utf8'));
 
-test('the checked-in recipe and lock validate, and pending values stay null', () => {
+test('the checked-in recipe and lock validate, with the measured model and the pinned build image', () => {
   const pack = loadPack(root);
   assert.equal(pack.lock.whisper.commit, 'd1be6fde11ac6e0407606b4e42fe72d34add8037');
   assert.deepEqual(pack.recipe.models.candidates, pack.lock.models.map(model => model.file));
-  assert.equal(pack.recipe.models.selected, null);
-  assert.equal(pack.recipe.threads, null);
-  assert.deepEqual(pack.recipe.build, { image: null, packageSnapshot: null });
+  // ADR-002 D3: the first candidate that passes the reference-board measurement.
+  assert.equal(pack.recipe.models.selected, 'ggml-base.bin');
+  assert.equal(pack.recipe.threads, 4);
+  assert.match(pack.recipe.build.image, /^ubuntu:22\.04@sha256:[a-f0-9]{64}$/);
+  assert.match(pack.recipe.build.packageSnapshot, /^\d{8}T\d{6}Z$/);
 });
 
 test('the recipe validator rejects values outside SPEC-002 FR-A2', () => {

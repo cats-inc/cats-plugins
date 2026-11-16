@@ -15,14 +15,14 @@
       "ggml-base-q5_1.bin",
       "ggml-tiny.bin"
     ],
-    "selected": null
+    "selected": "ggml-base.bin"
   },
-  "threads": null,
+  "threads": 4,
   "languageMapping": {
     "jw": "jv"
   },
   "build": {
-    "image": null,
-    "packageSnapshot": null
+    "image": "ubuntu:22.04@sha256:9abcaffc92a5279fff3a6a41635c0800ea33e528425fb389658806476e7defde",
+    "packageSnapshot": "20261116T000000Z"
   }
 }

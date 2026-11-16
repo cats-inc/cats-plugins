@@ -1,0 +1,92 @@
+name: Release linux-stt
+# Publishes a linux-stt feature pack release (cats-plugins SPEC-002 FR-F1, FR-F2)
+# from a `linux-stt-v<version>` tag on the frozen release commit. It builds and
+# tests both architectures exactly as CI does, then creates the release with
+# every asset at once. An existing release is never replaced; a failed run is
+# fixed with a new version, not by re-tagging.
+on:
+  push:
+    tags: ['linux-stt-v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: The tag names the recipe version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test "$TAG" = "linux-stt-v$(node -p "require('./packs/linux-stt/recipe.json').version")"
+      - name: Fetch and verify the locked sources and model
+        run: npm run pack -- fetch linux-stt --out inputs
+      - name: Prepare the build environment image
+        run: npm run pack -- environment linux-stt
+      - name: Build without a network
+        run: |
+          set -euo pipefail
+          sudo unshare --net -- sudo -u "$(id -un)" env "PATH=$PATH" "HOME=$HOME" \
+            npm run pack -- build linux-stt --out "dist/linux-stt/${{ matrix.arch }}" \
+            --sources inputs/linux-stt-*-sources.tar --models inputs/models
+      - name: Protocol tests in a container without a network
+        run: |
+          set -euo pipefail
+          out="dist/linux-stt/${{ matrix.arch }}"
+          image=$(node -p "require('./$out/build-receipt-linux-${{ matrix.arch }}.json').environment")
+          node scripts/linux-stt-protocol.mjs "$out"/linux-stt-*.catspack "$out"/linux-stt-*-sources.tar "$image"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-stt-${{ matrix.arch }}
+          path: dist/linux-stt/${{ matrix.arch }}/
+          retention-days: 30
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: linux-stt-*
+          path: built
+      - name: Verify and assemble the assets
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./packs/linux-stt/recipe.json').version")
+          mkdir assets
+          for arch in x64 arm64; do
+            dir="built/linux-stt-$arch"
+            node src/packs/cli.mjs verify linux-stt "$dir/linux-stt-$version-linux-$arch.catspack" "$dir/lock-entry-$arch.json"
+            (cd "$dir" && sha256sum -c "linux-stt-$version-linux-$arch.catspack.sha256")
+            cp "$dir/linux-stt-$version-linux-$arch.catspack" "$dir/linux-stt-$version-linux-$arch.catspack.sha256" \
+              "$dir/feature-pack-linux-$arch.json" "$dir/build-receipt-linux-$arch.json" "$dir/lock-entry-$arch.json" assets/
+          done
+          # One source archive: both architectures retain the same bytes.
+          cmp "built/linux-stt-x64/linux-stt-$version-sources.tar" "built/linux-stt-arm64/linux-stt-$version-sources.tar"
+          cp "built/linux-stt-x64/linux-stt-$version-sources.tar" "built/linux-stt-x64/linux-stt-$version-sources.tar.sha256" assets/
+          cp packs/linux-stt/notices/*.txt assets/
+          ls -l assets
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file packs/linux-stt/RELEASE-NOTES.md assets/*

@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      model:
+        description: linux-stt model candidate to build (SPEC-002 FR-E1); empty builds the recipe's selected model
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -170,8 +175,68 @@ jobs:
           name: agency-preview-${{ matrix.os }}
           path: dist/agency-agents/
           retention-days: 14
+  # The linux-stt feature pack (cats-plugins SPEC-002 FR-C2): a native build
+  # per architecture on a runner of that architecture, in the pinned image.
+  # The build itself runs without a network: sources and the model are fetched
+  # and verified first, then the build reads only them (AC-06).
+  linux-stt:
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ needs.changes.result == 'success' && needs.changes.outputs.skip != '' && 'ubuntu-latest' || matrix.runner }}
+    env:
+      SKIP: ${{ needs.changes.result == 'success' && needs.changes.outputs.skip || '' }}
+      MODEL: ${{ github.event_name == 'workflow_dispatch' && inputs.model || '' }}
+    steps:
+      - name: Documentation-only change
+        if: env.SKIP == 'docs'
+        run: echo "Only docs/ or root agent instructions changed; the linux-stt build is skipped."
+      - name: Already tested
+        if: env.SKIP == 'tested'
+        run: echo "This exact code already passed; the linux-stt build is skipped."
+      - uses: actions/checkout@v5
+        if: env.SKIP == ''
+      - uses: actions/setup-node@v4
+        if: env.SKIP == ''
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+        if: env.SKIP == ''
+      - name: Fetch and verify the locked sources and model
+        if: env.SKIP == ''
+        run: npm run pack -- fetch linux-stt --out inputs ${MODEL:+--model "$MODEL"}
+      - name: Prepare the build environment image
+        if: env.SKIP == ''
+        run: npm run pack -- environment linux-stt
+      - name: Build without a network
+        if: env.SKIP == ''
+        run: |
+          set -euo pipefail
+          sudo unshare --net -- sudo -u "$(id -un)" env "PATH=$PATH" "HOME=$HOME" \
+            npm run pack -- build linux-stt --out "dist/linux-stt/${{ matrix.arch }}" \
+            --sources inputs/linux-stt-*-sources.tar --models inputs/models ${MODEL:+--model "$MODEL"}
+      - name: Protocol tests in a container without a network
+        if: env.SKIP == ''
+        run: |
+          set -euo pipefail
+          out="dist/linux-stt/${{ matrix.arch }}"
+          image=$(node -p "require('./$out/build-receipt-linux-${{ matrix.arch }}.json').environment")
+          node scripts/linux-stt-protocol.mjs "$out"/linux-stt-*.catspack "$out"/linux-stt-*-sources.tar "$image"
+      - uses: actions/upload-artifact@v4
+        if: env.SKIP == ''
+        with:
+          name: linux-stt-${{ matrix.arch }}
+          path: dist/linux-stt/${{ matrix.arch }}/
+          retention-days: 14
   reproducibility:
-    needs: [changes, producer]
+    needs: [changes, producer, linux-stt]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -180,7 +245,8 @@ jobs:
       - name: Require every producer check
         env:
           PRODUCER_RESULT: ${{ needs.producer.result }}
-        run: test "$PRODUCER_RESULT" = success
+          LINUX_STT_RESULT: ${{ needs.linux-stt.result }}
+        run: test "$PRODUCER_RESULT" = success && test "$LINUX_STT_RESULT" = success
       - name: Documentation-only change
         if: env.SKIP == 'docs'
         run: echo "Only docs/ or root agent instructions (AGENTS.md, CLAUDE.md, CODEX.md, GEMINI.md) changed; there are no package artifacts to compare."
